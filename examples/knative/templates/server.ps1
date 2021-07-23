@@ -1,9 +1,9 @@
 if (${env:PORT}) {
-    $url = "http://*:${env:PORT}/"
+    $url = "http://localhost:${env:PORT}/"
     $localUrl = "http://localhost:${env:PORT}/"
 }
 else {
-    $url = "http://*:8080/"
+    $url = "http://localhost:8080/"
     $localUrl = "http://localhost:8080/"
 }
 
