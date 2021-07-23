@@ -124,7 +124,7 @@ $backgroundServer = Start-ThreadJob {
 
 $killEvent = new-object 'System.Threading.AutoResetEvent' -ArgumentList $false
 
-$serverTerminateJob = Start-ThreadJob {
+Start-ThreadJob {
     param($killEvent, $url, $serverStopMessage)
     $killEvent.WaitOne() | Out-Null
     Invoke-WebRequest -Uri $url -Body $serverStopMessage | Out-Null
