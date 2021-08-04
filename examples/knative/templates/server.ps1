@@ -21,8 +21,18 @@ $backgroundServer = Start-ThreadJob {
 
     function Start-HttpCloudEventListener {
         <#
-            .DESCRIPTION
-            Starts a HTTP Listener on specified Url
+        .SYNOPSIS
+        Starts a HTTP listener on specified Url
+
+        .DESCRIPTION
+        Starts a HTTP listener and processes requests sequentially using the listener's context in an infinite loop.
+        The listener stops graefully on $serverStopMessage request.
+
+        .PARAMETER Url
+        Specifies which Url the HTTP listener should process
+
+        .OUTPUTS
+        Boolean $true when setver stop request is received, otherwise $null.
         #>
 
         [CmdletBinding()]
@@ -71,8 +81,18 @@ $backgroundServer = Start-ThreadJob {
                         # Server Stop request
                         $context.Response.StatusCode = [int]([System.Net.HttpStatusCode]::OK)
                         $context.Response.Close();
-                        # Set function reault
+
+                        # Runs Shutdown function (defined in handler.ps1) to clean up connections from warm startup
+                        try {
+                            Process-Shutdown
+                        }
+                        catch {
+                            Write-Error "`n$(Get-Date) - Shutdown Processing Error: $($_.Exception.ToString())"
+                        }
+
+                        # Set function result
                         $true
+                        # Break the infinite loop
                         break
                     }
 
@@ -83,13 +103,19 @@ $backgroundServer = Start-ThreadJob {
                         }
                         catch {
                             Write-Error "$(Get-Date) - Handler Processing Error: $($_.Exception.ToString())"
+                            # TODO: Consider returning more specific HTTP status based on the Process-Handler error.
+                            # The handler interface could be extended to provide expectations fot the event and to return HTTP 4xx.
                             $context.Response.StatusCode = [int]([System.Net.HttpStatusCode]::InternalServerError)
                         }
+                    } else {
+                        $context.Response.StatusCode = [int]([System.Net.HttpStatusCode]::BadRequest)
                     }
 
                 }
                 catch {
                     Write-Error "`n$(Get-Date) - HTTP Request Processing Error: $($_.Exception.ToString())"
+                    # TODO: Consider returning more specific HTTP status based on the exception.
+                    # If the comes from CloudEvents SDK regarding the cloud event formatting the error might be 4xx
                     $context.Response.StatusCode = [int]([System.Net.HttpStatusCode]::InternalServerError)
                 }
                 finally {
@@ -145,7 +171,6 @@ finally {
     $killEvent.Set() | Out-Null
     Get-Job | Wait-Job | Receive-Job
     Write-Host "$(Get-Date) - PowerShell HTTP server is stopped"
-
     # Runs Shutdown function (defined in handler.ps1) to clean up connections from warm startup
     try {
         Process-Shutdown

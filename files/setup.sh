@@ -25,13 +25,13 @@ VCENTER_USERNAME=$(/root/setup/getOvfProperty.py "guestinfo.vcenter_username")
 VCENTER_PASSWORD=$(/root/setup/getOvfProperty.py "guestinfo.vcenter_password")
 VCENTER_USERNAME_FOR_VEBA_UI=$(/root/setup/getOvfProperty.py "guestinfo.vcenter_veba_ui_username")
 VCENTER_PASSWORD_FOR_VEBA_UI=$(/root/setup/getOvfProperty.py "guestinfo.vcenter_veba_ui_password")
-VCENTER_DISABLE_TLS=$(/root/setup/getOvfProperty.py "guestinfo.vcenter_disable_tls_verification" | tr '[:upper:]' '[:lower:]')
+VCENTER_DISABLE_TLS=$(/root/setup/getOvfProperty.py "guestinfo.vcenter_disable_tls_verification")
 EVENT_PROCESSOR_TYPE=$(/root/setup/getOvfProperty.py "guestinfo.event_processor_type")
 OPENFAAS_PASSWORD=$(/root/setup/getOvfProperty.py "guestinfo.openfaas_password")
 OPENFAAS_ADV_OPTION=$(/root/setup/getOvfProperty.py "guestinfo.openfaas_advanced_options")
 KNATIVE_HOST=$(/root/setup/getOvfProperty.py "guestinfo.knative_host")
 KNATIVE_SCHEME=$(/root/setup/getOvfProperty.py "guestinfo.knative_scheme" | tr [:upper:] [:lower:])
-KNATIVE_DISABLE_TLS=$(/root/setup/getOvfProperty.py "guestinfo.knative_disable_tls_verification" | tr '[:upper:]' '[:lower:]')
+KNATIVE_DISABLE_TLS=$(/root/setup/getOvfProperty.py "guestinfo.knative_disable_tls_verification")
 KNATIVE_PATH=$(/root/setup/getOvfProperty.py "guestinfo.knative_path")
 AWS_EVENTBRIDGE_ACCESS_KEY=$(/root/setup/getOvfProperty.py "guestinfo.aws_eb_access_key")
 AWS_EVENTBRIDGE_ACCESS_SECRET=$(/root/setup/getOvfProperty.py "guestinfo.aws_eb_access_secret")
@@ -65,6 +65,9 @@ else
         echo
 	fi
 
+	# Determine Event Providers
+	EVENT_PROVIDERS=("vcenter")
+
 	# Determine Knative deployment model
 	if [ "${EVENT_PROCESSOR_TYPE}" == "Knative" ]; then
 		if [ ! -z ${KNATIVE_HOST} ]; then
@@ -75,6 +78,75 @@ else
 	else
 		KNATIVE_DEPLOYMENT_TYPE="na"
 	fi
+
+	# Customize the POD CIDR Network if provided or else default to 10.10.0.0/16
+	if [ -z "${POD_NETWORK_CIDR}" ]; then
+		POD_NETWORK_CIDR="10.16.0.0/16"
+	fi
+
+	# Slicing of escaped variables needed to properly handle the double quotation issue
+	ESCAPED_VCENTER_SERVER=$(eval echo -n ${VCENTER_SERVER} | jq -Rs .)
+	ESCAPED_VCENTER_USERNAME=$(eval echo -n ${VCENTER_USERNAME} | jq -Rs .)
+	ESCAPED_VCENTER_PASSWORD=$(eval echo -n ${VCENTER_PASSWORD} | jq -Rs .)
+	ESCAPED_ROOT_PASSWORD=$(eval echo -n ${ROOT_PASSWORD} | jq -Rs .)
+
+	ESCAPED_VCENTER_USERNAME_FOR_VEBA_UI=$(eval echo -n ${VCENTER_USERNAME_FOR_VEBA_UI} | jq -Rs .)
+	ESCAPED_VCENTER_PASSWORD_FOR_VEBA_UI=$(eval echo -n ${VCENTER_PASSWORD_FOR_VEBA_UI} | jq -Rs .)
+
+	ESCAPED_AWS_EVENTBRIDGE_ACCESS_KEY=$(eval echo -n ${AWS_EVENTBRIDGE_ACCESS_KEY} | jq -Rs .)
+	ESCAPED_AWS_EVENTBRIDGE_ACCESS_SECRET=$(eval echo -n ${AWS_EVENTBRIDGE_ACCESS_SECRET} | jq -Rs .)
+	ESCAPED_AWS_EVENTBRIDGE_EVENT_BUS=$(eval echo -n ${AWS_EVENTBRIDGE_EVENT_BUS} | jq -Rs .)
+	ESCAPED_AWS_EVENTBRIDGE_RULE_ARN=$(eval echo -n ${AWS_EVENTBRIDGE_RULE_ARN} | jq -Rs .)
+
+	ESCAPED_OPENFAAS_PASSWORD=$(eval echo -n ${OPENFAAS_PASSWORD} | jq -Rs .)
+
+	cat > /root/config/veba-config.json <<EOF
+{
+	"VEBA_DEBUG": "${VEBA_DEBUG}",
+	"HOSTNAME": "${HOSTNAME}",
+	"IP_ADDRESS": "${IP_ADDRESS}",
+	"NETMASK": "${NETMASK}",
+	"GATEWAY": "${GATEWAY}",
+	"DNS_SERVER": "${DNS_SERVER}",
+	"DNS_DOMAIN": "${DNS_DOMAIN}",
+	"NTP_SERVER": "${NTP_SERVER}",
+	"HTTP_PROXY": "${HTTP_PROXY}",
+	"HTTPS_PROXY": "${HTTPS_PROXY}",
+	"PROXY_USERNAME": "${PROXY_USERNAME}",
+	"PROXY_PASSWORD": "${PROXY_PASSWORD}",
+	"NO_PROXY": "${NO_PROXY}",
+	"ESCAPED_ROOT_PASSWORD": ${ESCAPED_ROOT_PASSWORD},
+	"ENABLE_SSH": "${ENABLE_SSH}",
+	"ESCAPED_VCENTER_SERVER": ${ESCAPED_VCENTER_SERVER},
+	"ESCAPED_VCENTER_USERNAME": ${ESCAPED_VCENTER_USERNAME},
+	"ESCAPED_VCENTER_PASSWORD": ${ESCAPED_VCENTER_PASSWORD},
+	"ESCAPED_VCENTER_USERNAME_FOR_VEBA_UI": ${ESCAPED_VCENTER_USERNAME_FOR_VEBA_UI},
+	"ESCAPED_VCENTER_PASSWORD_FOR_VEBA_UI": ${ESCAPED_VCENTER_PASSWORD_FOR_VEBA_UI},
+	"VCENTER_DISABLE_TLS": "${VCENTER_DISABLE_TLS}",
+	"EVENT_PROCESSOR_TYPE": "${EVENT_PROCESSOR_TYPE}",
+	"KNATIVE_DEPLOYMENT_TYPE": "${KNATIVE_DEPLOYMENT_TYPE}",
+	"ESCAPED_OPENFAAS_PASSWORD": ${ESCAPED_OPENFAAS_PASSWORD},
+	"OPENFAAS_ADV_OPTION": "${OPENFAAS_ADV_OPTION}",
+	"KNATIVE_HOST": "${KNATIVE_HOST}",
+	"KNATIVE_SCHEME": "${KNATIVE_SCHEME}",
+	"KNATIVE_DISABLE_TLS": "${KNATIVE_DISABLE_TLS}",
+	"KNATIVE_PATH": "${KNATIVE_PATH}",
+	"ESCAPED_AWS_EVENTBRIDGE_ACCESS_KEY": ${ESCAPED_AWS_EVENTBRIDGE_ACCESS_KEY},
+	"ESCAPED_AWS_EVENTBRIDGE_ACCESS_SECRET": ${ESCAPED_AWS_EVENTBRIDGE_ACCESS_SECRET},
+	"ESCAPED_AWS_EVENTBRIDGE_EVENT_BUS": ${ESCAPED_AWS_EVENTBRIDGE_EVENT_BUS},
+	"AWS_EVENTBRIDGE_REGION": "${AWS_EVENTBRIDGE_REGION}",
+	"ESCAPED_AWS_EVENTBRIDGE_RULE_ARN": ${ESCAPED_AWS_EVENTBRIDGE_RULE_ARN},
+	"AWS_EVENTBRIDGE_ADV_OPTION": "${AWS_EVENTBRIDGE_ADV_OPTION}",
+	"CUSTOM_VEBA_TLS_PRIVATE_KEY": "${CUSTOM_VEBA_TLS_PRIVATE_KEY}",
+	"CUSTOM_VEBA_TLS_CA_CERT": "${CUSTOM_VEBA_TLS_CA_CERT}",
+	"DOCKER_NETWORK_CIDR": "${DOCKER_NETWORK_CIDR}",
+	"POD_NETWORK_CIDR": "${POD_NETWORK_CIDR}",
+	"SYSLOG_SERVER_HOSTNAME": "${SYSLOG_SERVER_HOSTNAME}",
+	"SYSLOG_SERVER_PORT": "${SYSLOG_SERVER_PORT}",
+	"SYSLOG_SERVER_PROTOCOL": "${SYSLOG_SERVER_PROTOCOL}",
+	"SYSLOG_SERVER_FORMAT": "${SYSLOG_SERVER_FORMAT}"
+}
+EOF
 
 	echo -e "\e[92mStarting Customization ..." > /dev/console
 
